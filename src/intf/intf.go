@@ -19,9 +19,7 @@ type Intf struct {
 	TxChan chan *packet.Packet
 	UPStream UpStream
 	EgressVlan string
-	rxPkts int
-	txPkts int
-	dropPkts int
+	pc packet.PktCounts
 	h map[string]*host.Host
 	fwAttached *host.FireWall
 	fwAttachedNear bool
@@ -34,9 +32,8 @@ type Pkt_Intf struct {
 
 func (i Intf) String() string {
 	s := fmt.Sprintf("Interface Name - %v, Hosts attached %v\n", i.Name, i.h )
-	if (i.rxPkts != 0 || i.txPkts !=0 || i.dropPkts!= 0) {
-		s += fmt.Sprintf("Interface Name   - %v\n Receive Packets   - %v\n Transmit Packets - %v\n Drop Packets - %v\n\n",
-			i.Name, i.rxPkts, i.txPkts, i.dropPkts)
+	if i.pc.PktCounter() {
+		s += fmt.Sprintf("%v", i.pc)
 	}
 	if i.UPStream != nil {
 		// This can be a vlan or a rule
@@ -79,7 +76,7 @@ func ( i *Intf) RcvUp( p *packet.Packet, h *host.Host ) {
 	if (h == nil) {
 		trace.T(fmt.Sprintf("rcv from Firewall"))
 		p.History += fmt.Sprintf("rcv from Firewall on %s\n", i.Name)
-		i.rxPkts++
+		i.pc.RxIncr()
 		i.UPStream.RcvUp( p, i )
 		return
 	}
@@ -90,7 +87,7 @@ func ( i *Intf) RcvUp( p *packet.Packet, h *host.Host ) {
 		trace.T(fmt.Sprintf( " Received from %s on %s\n", h.Name, i.Name ) )
 		p.History += fmt.Sprintf( "Received from %s on %s\n", h.Name, i.Name )
 		if i.UPStream != nil {
-			i.rxPkts++
+			i.pc.RxIncr()
 			i.UPStream.RcvUp( p, i )
 		} else {
 			// Consume it
@@ -99,7 +96,7 @@ func ( i *Intf) RcvUp( p *packet.Packet, h *host.Host ) {
 	} else {
 		fmt.Printf( "**Error - Received %v from %s on %s\n", p, h.Name, i.Name )
 		fmt.Printf( "**Error - Hosts are %v on %v\n", i.h, i.Name )
-		i.dropPkts++
+		i.pc.DropIncr()
 	}
 }
 
@@ -115,7 +112,7 @@ func ( i *Intf) Enable() {
 	     case  <- i.rcvChan:
 		     trace.T("")
 		     fmt.Printf("**********");
-		     i.rxPkts++
+		     i.pc.RxIncr()
 	     case p:= <- i.TxChan:
 		     trace.T(fmt.Sprintf("Sending out on %s\n", i.Name))
 		     if i.EgressVlan == "" {
@@ -138,9 +135,9 @@ func ( i *Intf) Enable() {
 				     trace.T(fmt.Sprintf("Sending packet out to %s from %s\n", h.Name, i.Name))
 				     p.History += fmt.Sprintf("Sending packet out to %s from %s\n", h.Name, i.Name)
 				     h.RcvChan <- p
-				     i.txPkts++
+				     i.pc.TxIncr()
 			     } else {
-				     i.dropPkts++
+				     i.pc.DropIncr()
 			     }
 		     }
 	     }	 

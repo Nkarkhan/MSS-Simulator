@@ -11,37 +11,19 @@ type UpStream interface {
 	RcvUp(p *packet.Packet, from *Host)
 }
 
-type PktCounts struct {
-	rxPkts int
-	txPkts int
-	dropPkts int
-}
-
-func (pc PktCounts) String() string {
-	s:=""
-	if (pc.rxPkts != 0 || pc.txPkts !=0 || pc.dropPkts!= 0) {
-		s += fmt.Sprintf("Receive Packets   - %v\n Transmit Packets - %v\n Drop Packets - %v\n\n",
-			pc.rxPkts, pc.txPkts, pc.dropPkts)
-	}
-	return s
-}
-
-func (pc PktCounts) PktCounter() bool {
-	return (pc.rxPkts != 0 || pc.txPkts !=0 || pc.dropPkts!= 0)
-}
 
 type Host struct {
 	Name string
 	UPStream UpStream
 	RcvChan chan *packet.Packet
 	Vlan string
-	pc PktCounts
+	pc packet.PktCounts
 }
 
 func (h Host) String() string {
 	s := ""
 	if h.pc.PktCounter() {
-		s += fmt.Sprintf("Host Name   - %v\n%v\n", h.Name, h.pc)
+		s += fmt.Sprintf("Host Name   - %v\n%v", h.Name, h.pc)
 	}
 	return s
 }
@@ -59,7 +41,7 @@ func (h *Host) Send( PktType string, DstHost string, D time.Duration, N int ) {
 				Loop: 1 }
 			p.History += fmt.Sprintf("Sent from %s\n", h.Name)
 			h.UPStream.RcvUp( &p, h )
-			h.pc.txPkts++
+			h.pc.TxIncr()
 			time.Sleep(D)
 		}
 	}()
@@ -74,10 +56,10 @@ func (h *Host) Enable() {
 			p := <-h.RcvChan
 			trace.T( fmt.Sprintf("Host rcv %s", h.Name) )
 			if p.DstMac != fmt.Sprintf("%s-Mac", h.Name) {
-				h.pc.dropPkts++
+				h.pc.DropIncr()
 			} else {
 				trace.T( "My mac ")
-				h.pc.rxPkts++
+				h.pc.RxIncr()
 				if p.Loop != 0 {
 					// Loop it back out
 					newP := &packet.Packet{}
@@ -92,7 +74,7 @@ func (h *Host) Enable() {
 					newP.SrcIp = tmpStr
 					newP.History += fmt.Sprintf("Packet looped from %s to %s\n", h.Name, newP.DstMac );
 					h.UPStream.RcvUp( newP, h )
-					h.pc.txPkts++
+					h.pc.TxIncr()
 				} else {
 					p.History += fmt.Sprintf("EOF on %s", h.Name);
 					fmt.Printf("Host %s rcv %v\n", h.Name, p)
@@ -109,8 +91,8 @@ type FireWall struct {
 	UPStreamFar UpStream
 	RcvChanNear chan *packet.Packet
 	RcvChanFar chan *packet.Packet
-	nearPc PktCounts
-	farPc PktCounts
+	nearPc packet.PktCounts
+	farPc packet.PktCounts
 }
 
 func (fw FireWall) String() string {
@@ -130,14 +112,14 @@ func (fw *FireWall) Enable() {
 		for {
 			select {
 			case p := <-fw.RcvChanNear:
-				fw.nearPc.rxPkts++
-				fw.farPc.txPkts++
+				fw.nearPc.RxIncr()
+				fw.farPc.TxIncr()
 				trace.T(fmt.Sprintf("FireWall Near rcv\n"))
 				p.History += fmt.Sprintf("FireWall Near rcv\n")
 				fw.UPStreamFar.RcvUp( p, nil )
 			case p := <-fw.RcvChanFar:
-				fw.farPc.rxPkts++
-				fw.nearPc.txPkts++
+				fw.farPc.RxIncr()
+				fw.nearPc.TxIncr()
 				trace.T(fmt.Sprintf("FireWall Far rcv\n"))
 				p.History += fmt.Sprintf("FireWall Far rcv\n")
 				fw.UPStreamNear.RcvUp( p, nil )

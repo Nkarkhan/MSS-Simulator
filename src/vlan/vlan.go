@@ -34,10 +34,7 @@ type Vlan struct {
 	TxChan chan *packet.Packet
 	UPStream UpStream
 	intfs map[string]vlan_intf
-	rxPkts int
-	txPkts int
-	dropPkts int
-	floodPkts int
+	pc packet.PktCounts
 } 
 
 func (v Vlan) String() string {
@@ -45,9 +42,8 @@ func (v Vlan) String() string {
 	for _,v := range v.intfs {
 		s += fmt.Sprintf("%v\n", v.i)
 	}
-	if (v.rxPkts != 0 || v.txPkts !=0 || v.dropPkts!= 0 || v.floodPkts!= 0) {
-		s += fmt.Sprintf("Vlan Name   - %v\n Receive Packets   - %v\n Transmit Packets - %v\n Drop Packets - %v\n Flood Packets - %v\n\n",
-			v.Name, v.rxPkts, v.txPkts, v.dropPkts, v.floodPkts)
+	if v.pc.PktCounter() {
+		s += fmt.Sprintf("%v", v.pc)
 		return s
 	}
 	return s
@@ -113,7 +109,7 @@ func (v *Vlan) sndDst( i *intf.Intf, p *packet.Packet ) {
 				trace.T(fmt.Sprintf("Packet forwarded to learnt interface %s\n", iv.i.Name))
 				p.History += fmt.Sprintf("Packet forwarded to learnt interface %s\n", iv.i.Name)
 				iv.i.TxChan <- p
-				v.txPkts++
+				v.pc.TxIncr()
 				return
 			} else {
 				fmt.Printf("Learnt mac lookup failed %s %v on %s\n", destination, iv.h, iv.i.Name)
@@ -122,7 +118,7 @@ func (v *Vlan) sndDst( i *intf.Intf, p *packet.Packet ) {
 	}
 	// Time to flood
 	// We are still here so flood it
-	v.floodPkts++
+	v.pc.FloodIncr()
 	for k,iv := range v.intfs {
 		if (i != nil) && (k == i.Name) {
 			// Dont reflect packet back!
@@ -151,7 +147,7 @@ func (v *Vlan) Enable() {
 		for {
 			select {
 			case p := <- v.RcvChan:
-				v.rxPkts++
+				v.pc.RxIncr()
 				// See about learning Src
 				v.learnMac(p.I, p.P)
 				// See about forwarding

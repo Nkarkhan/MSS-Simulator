@@ -36,10 +36,7 @@ type Vtep struct {
 	TxChan chan *packet.Packet
 	UPStream UpStream
 	vfpRules DFVfp
-	rxPkts int
-	txPkts int
-	dropPkts int
-	floodPkts int
+	pc packet.PktCounts
 }
 
 type DFVfp struct {
@@ -221,7 +218,7 @@ func (vt *Vtep) Enable() {
 		for {
 			select {
 			case p := <- vt.RcvChan:
-				vt.rxPkts++
+				vt.pc.RxIncr()
 				// See about learning Src
 				vt.learnMac(p.V, p.P)
 				// See about forwarding
@@ -229,6 +226,7 @@ func (vt *Vtep) Enable() {
 				p.P.Vlan = mapVlan
 				vt.UPStream.RcvUp(p.P, vt, vt.vLearn, vt.serviceVlanLearn)
 			case p:= <- vt.TxChan:
+				vt.pc.TxIncr()
 				// See about forwarding
 				mapVlan, _ := vt.vlanVniMap[p.Vlan]
 				p.Vlan = mapVlan

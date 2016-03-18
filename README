@@ -1,0 +1,12 @@
+
+to compile
+opportunity-59:MSS-Simulator nkarkhan$ export | grep GO
+declare -x GOBIN="/Users/nkarkhan/Dropbox/MSS-Simulator/bin"
+declare -x GOPATH="/Users/nkarkhan/Dropbox/MSS-Simulator"
+
+cd $GOPATH
+go build -race test
+go install test
+
+.bin/test
+
